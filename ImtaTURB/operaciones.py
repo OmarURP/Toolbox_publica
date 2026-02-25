@@ -1101,3 +1101,82 @@ def recortar_tiempo(U_probes, probe,
 
     return u1, u2, u3, tiempo, dfp_filt
 
+# Carga de archivos de presión en openfoam
+def cargar_p_OpenFOAM(ruta_archivo: str):
+    """
+    Lee un archivo de postproceso de OpenFOAM (campo p en probes) y regresa:
+
+    - p_probes: dict {probe_id: Series con presión y eje índice = tiempo}
+    - tiempo:   Series con el vector de tiempo (s)
+    - coords:   dict {probe_id: (x, y, z)}
+    - fs:       Frecuencia de muestreo (Hz)
+    """
+
+    # 1) Detectar número de probes y línea donde inician los datos
+    total_probes = 0
+    data_start = None
+    with open(ruta_archivo, "r") as f:
+        for i, line in enumerate(f):
+            if line.startswith("# Probe"):
+                total_probes += 1
+            elif line.startswith("# Time"):
+                data_start = i + 1
+                break
+
+    if data_start is None:
+        raise ValueError("No se encontró la línea '# Time' en el archivo.")
+
+    # 2) Extraer coordenadas de los probes
+    coords = {}  # {índice_probe: (x, y, z)}
+    with open(ruta_archivo, "r") as f:
+        for line in f:
+            if line.startswith("# Time"):
+                break
+            m = re.match(r"#\s*Probe\s+(\d+)\s*\(([^)]+)\)", line)
+            if m:
+                idx = int(m.group(1))
+                coords[idx] = tuple(map(float, m.group(2).split()))
+
+    # 3) Leer datos numéricos (tiempo y p)
+    df = pd.read_csv(
+        ruta_archivo,
+        skiprows=data_start,
+        sep=r"\s+",
+        comment="#",
+        header=None,
+        dtype=str  # Leer como string primero
+    )
+
+    # Columna 0 es tiempo
+    tiempo = pd.to_numeric(df[0], errors="coerce")
+
+    # 4) Convertir columnas de presión a float
+    for col in range(1, df.shape[1]):
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("float32")
+
+    # 5) Organizar presión por probe (tiempo como índice)
+    p_probes = {}
+    tiempo_values = tiempo.values
+    for p in range(total_probes):
+        col = 1 + p
+        p_probes[p] = pd.Series(df[col].values, index=tiempo_values, name="p")
+
+    # 6) Cálculos de duración y frecuencia de muestreo
+    t_ini = float(tiempo.iloc[0])
+    t_fin = float(tiempo.iloc[-1])
+    duracion = t_fin - t_ini
+
+    if len(tiempo) > 1:
+        dt = float(tiempo.iloc[1] - tiempo.iloc[0])
+        fs = 1.0 / dt
+    else:
+        dt = float("nan")
+        fs = float("nan")
+
+    # 7) Reporte
+    print(f"Se extrajeron {total_probes} probes.")
+    print(f"Tiempo inicial: {t_ini:.2f} s, tiempo final: {t_fin:.2f} s")
+    print(f"Duración de la muestra: {duracion:.2f} s")
+    print(f"Frecuencia de muestreo: {fs:.2f} Hz (Δt = {dt:.4f} s)")
+
+    return p_probes, tiempo, coords, fs
