@@ -1,2 +1,8 @@
 *.psd filter=lfs diff=lfs merge=lfs -text
 Datos/OpenFOAM/20_cm/U filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/Parcelas/U filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/40_cm/U_1 filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/Parcelas/p filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/20_cm/U_1 filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/30_cm/U_1 filter=lfs diff=lfs merge=lfs -text
+Datos/OpenFOAM/20_cm/U_1_old filter=lfs diff=lfs merge=lfs -text
