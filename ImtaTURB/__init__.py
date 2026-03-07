@@ -6,6 +6,6 @@ un uso fácil e intuitivo.
 
 """
 
-from .operaciones import suma, fluctuante, cargar_vectrino, autocorrelacion_norm, plot_ui, plot_ui_grid, espectros_tensor, correlacion_cruzada_norm, cargar_U_OpenFOAM, recortar_tiempo, cargar_p_OpenFOAM
+from .operaciones import suma, fluctuante, cargar_vectrino, autocorrelacion_norm, plot_ui, plot_ui_grid, espectros_tensor, correlacion_cruzada_norm, cargar_U_OpenFOAM, recortar_tiempo, cargar_p_OpenFOAM, plot_p, cargar_nut_OpenFOAM, plot_nut
 
-__all__ = ["suma", "fluctuante", "cargar_vectrino", "autocorrelacion_norm", "plot_ui", "plot_ui_grid", "espectros_tensor", "correlacion_cruzada_norm", "cargar_U_OpenFOAM", "recortar_tiempo","cargar_p_OpenFOAM"]
+__all__ = ["suma", "fluctuante", "cargar_vectrino", "autocorrelacion_norm", "plot_ui", "plot_ui_grid", "espectros_tensor", "correlacion_cruzada_norm", "cargar_U_OpenFOAM", "recortar_tiempo","cargar_p_OpenFOAM", "plot_p", "cargar_nut_OpenFOAM", "plot_nut"]

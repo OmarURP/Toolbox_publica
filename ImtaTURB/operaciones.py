@@ -28,62 +28,49 @@ def suma(a, b):
 
 
 # Función para calcular las propiedades fluctuantes
-def fluctuante(serie, tiempo=None, plot=False, titulo='Gráfico de velocidades'):
+def fluctuante(serie, tiempo=None, plot=False, titulo='Gráfico de series'):
     """
-    Calcula el valor medio instantáneo y su componente fluctuante-media
-    a partir del campo instantáneo. Opcionalmente genera un gráfico de la
-    señal instantánea y su parte fluctuante.
+    Calcula el valor medio y la componente fluctuante (Reynolds).
+    Funciona para Series (p o un componente de U) o para DataFrame (U completo).
 
-    Esta función implementa la descomposición de Reynolds:
-        φ(x,t) = φ̄(x) + φ'(x,t)
-    donde φ̄ es la media y φ' es la fluctuante.
-    
     Parámetros
     ----------
-    serie : array_like
-        Serie instantánea de datos (por ejemplo, presión, velocidad, etc.).
+    serie : array_like o pandas.Series o pandas.DataFrame
+        Serie o DataFrame con datos instantáneos.
     tiempo : array_like, optional
-        Vector de tiempo asociado a la serie (mismo tamaño que `serie`).
-        Solo es necesario si `plot=True`.
+        Vector de tiempo asociado a la serie.
     plot : bool, optional
-        Si True, genera una figura con:
-        - Arriba: serie instantánea y su media.
-        - Abajo: serie fluctuante y su media (≈ 0).
-        Por defecto False.
+        Si True, genera la(s) figura(s).
     titulo : str, optional
-        Título base para la figura (por defecto 'Velocidad en un punto').
+        Título base para la figura.
 
     Retorna
     -------
     resultado : dict
-        Diccionario con:
-        - 'inst_med': Valor medio de la serie instantánea original (φ̄).
-        - 'fluc'    : Serie de fluctuaciones (serie - media) (φ').
-        - 'fluc_med': Media de las fluctuaciones (teóricamente ≈ 0).
-        - 'serie'   : Serie original proporcionada.
-    fig : matplotlib.figure.Figure or None
-        Si plot=True, devuelve la figura generada.
-        Si plot=False, devuelve None.
-
-    Ejemplos
-    --------
-    >>> u = np.random.randn(1000) + 0.2  # señal con media 0.2
-    >>> t = np.linspace(0, 10, 1000)
-    >>> u_fluc, fig = fluctuante(u, tiempo=t, plot=True, titulo='u₁ en celda 4')
-    >>> print(u_fluc['inst_med'])
+        - Si serie es Series/array: dict con inst_med, fluc, fluc_med, serie.
+        - Si serie es DataFrame: dict por columna con los mismos campos.
+    fig : matplotlib.figure.Figure or dict or None
+        - Figura única si serie es Series.
+        - Diccionario de figuras por columna si serie es DataFrame.
     """
-    # Convertir a array de numpy
+    # Caso DataFrame (U completo u otras variables)
+    if isinstance(serie, pd.DataFrame):
+        resultados = {}
+        figuras = {} if plot else None
+        for col in serie.columns:
+            res, fig = fluctuante(serie[col], tiempo=tiempo, plot=plot,
+                                  titulo=f"{titulo}: {col}")
+            resultados[col] = res
+            if plot:
+                figuras[col] = fig
+        return resultados, figuras
+
+    # Caso Series/array
     serie = np.asarray(serie)
-    
-    # Calcular la media de la serie
     inst_med = np.mean(serie)
-    
-    # Calcular las fluctuaciones
     fluc = serie - inst_med
-    
-    # Calcular la media de las fluctuaciones (teóricamente debería ser cercana a 0)
     fluc_med = np.mean(fluc)
-    
+
     resultado = {
         'inst_med': inst_med,
         'fluc': fluc,
@@ -99,37 +86,22 @@ def fluctuante(serie, tiempo=None, plot=False, titulo='Gráfico de velocidades')
         if tiempo.shape != serie.shape:
             raise ValueError("El vector 'tiempo' debe tener la misma forma que 'serie'.")
 
-        # Gráfico
         fig, axs = plt.subplots(2, 1, figsize=(10, 5), sharex=True, sharey=False)
         ax1, ax2 = axs
 
-        # Velocidad instantánea
-        ax1.plot(tiempo, serie, linewidth=0.5, alpha=0.7)
-        ax1.axhline(inst_med,
-                    color='darkblue',
-                    linestyle=':',
-                    label=r'$\overline{U}=$' + f'{inst_med:.3f} m/s')
-        ax1.legend(loc='upper right')
-        ax1.set_ylabel(r'$u_i$ (m/s)')
-        ax1.set_title(f'{titulo} - Velocidad instantánea')
+        # Serie instantánea
+        ax1.plot(tiempo, serie, linewidth=0.5, alpha=0.7, label='Serie')
+        ax1.axhline(inst_med, color='r', linestyle='--', label='Media')
+        ax1.set_ylabel('Magnitud')
+        ax1.set_title(titulo)
+        ax1.legend()
 
-        # Velocidad fluctuante
-        ax2.plot(tiempo, fluc, linewidth=0.5, alpha=0.7)
-        ax2.axhline(fluc_med,
-                    color='k',
-                    linestyle=':',
-                    label=r'$\overline{u_{i}}^\prime=$' + f'{fluc_med:.3f} m/s')
-        ax2.set_ylabel(r'$u_{i}^\prime$ (m/s)')
-        ax2.set_xlabel(r'$t$ (s)')
-        ax2.legend(loc='upper right')
-        ax2.set_title(f'{titulo} - Velocidad fluctuante')
-
-        plt.tight_layout()
-
-        # Cambiar fondo a transparente de la figura y blanco en los ejes
-        fig.patch.set_facecolor('none')
-        ax1.set_facecolor('white')
-        ax2.set_facecolor('white')
+        # Fluctuante
+        ax2.plot(tiempo, fluc, linewidth=0.5, alpha=0.7, label="Fluctuante")
+        ax2.axhline(fluc_med, color='r', linestyle='--', label='Media fluc')
+        ax2.set_xlabel('Tiempo [s]')
+        ax2.set_ylabel('Magnitud')
+        ax2.legend()
 
     return resultado, fig
 
@@ -1043,43 +1015,56 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
     return U_probes, tiempo, coords, fs
 
 # Funcion para ventana de tiempo
-def recortar_tiempo(U_probes, probe,
-                          inicio=0.0,
-                          fin=None,
-                          columnas=('Ux', 'Uz', 'Uy')):
+def recortar_tiempo(probes, probe=None,
+                    inicio=0.0,
+                    fin=None,
+                    columnas=('Ux', 'Uz', 'Uy'),
+                    columna_p='p'):
     """
     Recorta en tiempo los datos de un probe entre los tiempos `inicio` y `fin`.
 
+    Funciona para:
+    - U: DataFrame con columnas de velocidad (por defecto Ux, Uz, Uy).
+    - p: Series o DataFrame de una sola columna (por defecto 'p').
+
     Parámetros
     ----------
-    U_probes : dict-like
-        Contenedor (por ejemplo, dict) con los DataFrames de cada probe.
-        Se espera que U_probes[probe] sea un DataFrame con índice = tiempo (s).
-    probe : hashable
-        Clave del probe dentro de U_probes.
+    probes : dict-like o pandas.Series o pandas.DataFrame
+        - Si es dict-like, se espera probes[probe] con índice = tiempo.
+        - Si es Series/DataFrame, se trabaja directamente con ese objeto.
+    probe : hashable or None
+        Clave del probe dentro de probes si probes es dict-like.
     inicio : float, opcional
-        Tiempo inicial (en segundos) a partir del cual se conservan los datos.
-        Se filtra con condición t >= inicio.
+        Tiempo inicial (s) a partir del cual se conservan los datos.
     fin : float or None, opcional
-        Tiempo final (en segundos) hasta el cual se conservan los datos.
-        Si es None, se toma todo hasta el final (t <= max).
+        Tiempo final (s) hasta el cual se conservan los datos.
     columnas : tuple of str, opcional
-        Nombres de las columnas de velocidad en el DataFrame del probe.
-        Por defecto: ('Ux', 'Uz', 'Uy').
+        Nombres de columnas de velocidad para U.
+    columna_p : str, opcional
+        Nombre de columna de presión para p.
 
     Retorna
     -------
-    u1, u2, u3 : pandas.Series
-        Series de velocidades instantáneas recortadas.
-    tiempo : pandas.Index
-        Índice de tiempo recortado (mismas longitudes que u1, u2, u3).
-    dfp_filt : pandas.DataFrame
-        DataFrame filtrado completo del probe (por si se quiere reutilizar).
+    Para U:
+        u1, u2, u3 : pandas.Series
+        tiempo : pandas.Index
+        dfp_filt : pandas.DataFrame
+    Para p:
+        p : pandas.Series
+        tiempo : pandas.Index
+        dfp_filt : pandas.DataFrame or pandas.Series
     """
-    # DataFrame completo de ese probe
-    dfp = U_probes[probe]
+    # Selección de datos
+    if probe is not None:
+        dfp = probes[probe]
+    else:
+        dfp = probes
 
-    # Asegurar que el índice sea numérico/float (en segundos)
+    # Si es Series, convertir a DataFrame para manejo uniforme
+    if isinstance(dfp, pd.Series):
+        dfp = dfp.to_frame(name=columna_p)
+
+    # Asegurar índice numérico
     dfp = dfp.copy()
     dfp.index = pd.to_numeric(dfp.index, errors='coerce')
 
@@ -1089,17 +1074,27 @@ def recortar_tiempo(U_probes, probe,
         mask &= dfp.index <= float(fin)
 
     dfp_filt = dfp[mask]
-
-    # Extraer columnas de velocidad
-    col_u1, col_u2, col_u3 = columnas
-    u1 = dfp_filt[col_u1]
-    u2 = dfp_filt[col_u2]
-    u3 = dfp_filt[col_u3]
-
-    # Vector de tiempo filtrado
     tiempo = dfp_filt.index
 
-    return u1, u2, u3, tiempo, dfp_filt
+    # Caso U (varias columnas)
+    if all(col in dfp_filt.columns for col in columnas):
+        col_u1, col_u2, col_u3 = columnas
+        u1 = dfp_filt[col_u1]
+        u2 = dfp_filt[col_u2]
+        u3 = dfp_filt[col_u3]
+        return u1, u2, u3, tiempo, dfp_filt
+
+    # Caso p (una columna)
+    if columna_p in dfp_filt.columns and len(dfp_filt.columns) == 1:
+        p = dfp_filt[columna_p]
+        return p, tiempo, dfp_filt
+
+    # Caso p con una sola columna desconocida
+    if len(dfp_filt.columns) == 1:
+        p = dfp_filt.iloc[:, 0]
+        return p, tiempo, dfp_filt
+
+    raise ValueError("No se pudo identificar si los datos corresponden a U o a p.")
 
 # Carga de archivos de presión en openfoam
 def cargar_p_OpenFOAM(ruta_archivo: str):
@@ -1180,3 +1175,225 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
     print(f"Frecuencia de muestreo: {fs:.2f} Hz (Δt = {dt:.4f} s)")
 
     return p_probes, tiempo, coords, fs
+# Función para graficar presión instantánea y fluctuante en layout 2x1
+def plot_p(tiempo, p_fluc,
+           titulo='Presión instantánea y fluctuante',
+           etiqueta='p'):
+    """
+    Grafica en una sola figura la presión instantánea y fluctuante
+    en dos paneles (2 filas x 1 columna).
+
+    Panel superior:  p(t) con su valor medio \\overline{p}
+    Panel inferior:  p'(t) con la media de las fluctuaciones (≈ 0)
+
+    Parámetros
+    ----------
+    tiempo : array_like
+        Vector de tiempo (s).
+    p_fluc : dict
+        Diccionario devuelto por fluctuante() para presión.
+        Debe contener: 'serie', 'inst_med', 'fluc', 'fluc_med'.
+    titulo : str, opcional
+        Título general de la figura.
+    etiqueta : str, opcional
+        Etiqueta LaTeX sin $ para la variable, por ejemplo 'p'.
+
+    Retorna
+    -------
+    fig : matplotlib.figure.Figure
+        Figura creada.
+    axs : ndarray of Axes
+        Array 1D de ejes (2 elementos: [ax1, ax2]).
+    """
+    tiempo = np.asarray(tiempo)
+
+    fig, axs = plt.subplots(2, 1, figsize=(10, 5), sharex=True, sharey=False)
+    ax1, ax2 = axs
+    fig.suptitle(titulo, fontweight='bold')
+
+    # ===== Panel superior: presión instantánea =====
+    serie = p_fluc['serie']
+    inst_med = p_fluc['inst_med']
+
+    ax1.plot(tiempo, serie, linewidth=0.5, alpha=0.7)
+    ax1.axhline(
+        inst_med,
+        color='C0',
+        linestyle=':',
+        label=rf'$\overline{{{etiqueta}}}={inst_med:.3f}$'
+    )
+    ax1.set_ylabel(r'$p$')
+    ax1.set_title('Presión instantánea')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3, linestyle=':')
+
+    # ===== Panel inferior: presión fluctuante =====
+    fluc = p_fluc['fluc']
+    fluc_med = p_fluc['fluc_med']
+
+    ax2.plot(tiempo, fluc, linewidth=0.5, alpha=0.7)
+    ax2.axhline(
+        fluc_med,
+        color='k',
+        linestyle=':',
+        label=rf'$\overline{{{etiqueta}^\prime}}={fluc_med:.3e}$'
+    )
+    ax2.set_xlabel('Tiempo (s)')
+    ax2.set_ylabel(r"$p'$")
+    ax2.set_title('Presión fluctuante')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=0.3, linestyle=':')
+    plt.tight_layout()
+
+    return fig, axs
+
+def cargar_nut_OpenFOAM(ruta_archivo: str):
+    """
+    Lee un archivo de postproceso de OpenFOAM (campo nut en probes) y regresa:
+
+    - nut_probes: dict {probe_id: Series con nut y eje índice = tiempo}
+    - tiempo:     Series con el vector de tiempo (s)
+    - coords:     dict {probe_id: (x, y, z)}
+    - fs:         Frecuencia de muestreo (Hz)
+    """
+
+    # 1) Detectar número de probes y línea donde inician los datos
+    total_probes = 0
+    data_start = None
+    with open(ruta_archivo, "r") as f:
+        for i, line in enumerate(f):
+            if line.startswith("# Probe"):
+                total_probes += 1
+            elif line.startswith("# Time"):
+                data_start = i + 1
+                break
+
+    if data_start is None:
+        raise ValueError("No se encontró la línea '# Time' en el archivo.")
+
+    # 2) Extraer coordenadas de los probes
+    coords = {}  # {índice_probe: (x, y, z)}
+    with open(ruta_archivo, "r") as f:
+        for line in f:
+            if line.startswith("# Time"):
+                break
+            m = re.match(r"#\s*Probe\s+(\d+)\s*\(([^)]+)\)", line)
+            if m:
+                idx = int(m.group(1))
+                coords[idx] = tuple(map(float, m.group(2).split()))
+
+    # 3) Leer datos numéricos (tiempo y nut)
+    df = pd.read_csv(
+        ruta_archivo,
+        skiprows=data_start,
+        sep=r"\s+",
+        comment="#",
+        header=None,
+        dtype=str  # Leer como string primero
+    )
+
+    # Columna 0 es tiempo
+    tiempo = pd.to_numeric(df[0], errors="coerce")
+
+    # 4) Convertir columnas de nut a float64
+    for col in range(1, df.shape[1]):
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
+
+    # 5) Organizar nut por probe (tiempo como índice)
+    nut_probes = {}
+    tiempo_values = tiempo.values
+    for p in range(total_probes):
+        col = 1 + p
+        nut_probes[p] = pd.Series(df[col].values, index=tiempo_values, name="nut")
+
+    # 6) Cálculos de duración y frecuencia de muestreo
+    t_ini = float(tiempo.iloc[0])
+    t_fin = float(tiempo.iloc[-1])
+    duracion = t_fin - t_ini
+
+    if len(tiempo) > 1:
+        dt = float(tiempo.iloc[1] - tiempo.iloc[0])
+        fs = 1.0 / dt
+    else:
+        dt = float("nan")
+        fs = float("nan")
+
+    # 7) Reporte
+    print(f"Se extrajeron {total_probes} probes.")
+    print(f"Tiempo inicial: {t_ini:.2f} s, tiempo final: {t_fin:.2f} s")
+    print(f"Duración de la muestra: {duracion:.2f} s")
+    print(f"Frecuencia de muestreo: {fs:.2f} Hz (Δt = {dt:.4f} s)")
+
+    return nut_probes, tiempo, coords, fs
+
+# Función para graficar nut instantáneo y fluctuante en layout 2x1
+def plot_nut(tiempo, nut_fluc,
+             titulo='nut instantáneo y fluctuante',
+             etiqueta='nut'):
+    """
+    Grafica en una sola figura la serie instantánea y fluctuante de nut
+    en dos paneles (2 filas x 1 columna).
+
+    Panel superior:  nut(t) con su valor medio \\overline{nut}
+    Panel inferior:  nut'(t) con la media de las fluctuaciones (≈ 0)
+
+    Parámetros
+    ----------
+    tiempo : array_like
+        Vector de tiempo (s).
+    nut_fluc : dict
+        Diccionario devuelto por fluctuante() para nut.
+        Debe contener: 'serie', 'inst_med', 'fluc', 'fluc_med'.
+    titulo : str, opcional
+        Título general de la figura.
+    etiqueta : str, opcional
+        Etiqueta LaTeX sin $ para la variable, por ejemplo 'nut'.
+
+    Retorna
+    -------
+    fig : matplotlib.figure.Figure
+        Figura creada.
+    axs : ndarray of Axes
+        Array 1D de ejes (2 elementos: [ax1, ax2]).
+    """
+    tiempo = np.asarray(tiempo)
+
+    fig, axs = plt.subplots(2, 1, figsize=(10, 5), sharex=True, sharey=False)
+    ax1, ax2 = axs
+    fig.suptitle(titulo, fontweight='bold')
+
+    # ===== Panel superior: nut instantáneo =====
+    serie = nut_fluc['serie']
+    inst_med = nut_fluc['inst_med']
+
+    ax1.plot(tiempo, serie, linewidth=0.5, alpha=0.7)
+    ax1.axhline(
+        inst_med,
+        color='C0',
+        linestyle=':',
+        label=rf'$\overline{{{etiqueta}}}={inst_med:.3e}$'
+    )
+    ax1.set_ylabel(r'$nut$')
+    ax1.set_title('nut instantáneo')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3, linestyle=':')
+
+    # ===== Panel inferior: nut fluctuante =====
+    fluc = nut_fluc['fluc']
+    fluc_med = nut_fluc['fluc_med']
+
+    ax2.plot(tiempo, fluc, linewidth=0.5, alpha=0.7)
+    ax2.axhline(
+        fluc_med,
+        color='k',
+        linestyle=':',
+        label=rf'$\overline{{{etiqueta}^\prime}}={fluc_med:.3e}$'
+    )
+    ax2.set_xlabel('Tiempo (s)')
+    ax2.set_ylabel(r"$nut'$")
+    ax2.set_title('nut fluctuante')
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=0.3, linestyle=':')
+    plt.tight_layout()
+
+    return fig, axs
