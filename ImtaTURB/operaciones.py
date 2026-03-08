@@ -6,6 +6,7 @@ basadas en el análisis de series temporales de datos de simulaciones
 numéricas o experimentales.
 """
 import numpy as np
+import ImtaTURB as imta
 import scipy.io as sio
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -1397,3 +1398,74 @@ def plot_nut(tiempo, nut_fluc,
     plt.tight_layout()
 
     return fig, axs
+
+# === Funcion auxiliar: Cp promedio vs theta ===
+def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
+    """
+    Calcula el coeficiente de presion promedio (Cp) en funcion de la posicion
+    angular (theta) sobre la superficie de un cilindro, a partir de las series
+    temporales de presion cinematica registradas en sondas (probes) distribuidas
+    circunferencialmente.
+
+    El procedimiento interno es el siguiente:
+    1. Se extrae y recorta la serie temporal de presion cinematica (m^2/s^2)
+       de cada sonda mediante ``imta.recortar_tiempo``.
+    2. Se convierte la presion cinematica a presion estatica (Pa) multiplicando
+       por la densidad del fluido (rho).
+    3. Se obtiene el promedio temporal de la presion en cada posicion angular.
+    4. Se normaliza con la presion dinamica q = 0.5 * rho * U_inf^2 para
+       obtener el coeficiente de presion Cp.
+
+    Parametros
+    ----------
+    p_probes : pandas.DataFrame
+        DataFrame con las series temporales de presion cinematica (m^2/s^2)
+        de todas las sondas. Se espera el formato devuelto por
+        ``imta.cargar_p_OpenFOAM``.
+    probes_ordenados : list of int
+        Lista de indices de sondas ordenadas en sentido angular creciente
+        alrededor del cilindro.
+    rho : float
+        Densidad del fluido (kg/m^3).
+    U_inf : float
+        Velocidad de corriente libre (m/s).
+    t_ini : float, opcional
+        Instante de tiempo inicial para el recorte de las series. Si es
+        ``None``, se utiliza el primer valor del vector de tiempo disponible
+        (``tiempo_p.iloc[0]``).
+
+    Retorna
+    -------
+    Cp : numpy.ndarray, forma (n_angulos,)
+        Coeficiente de presion promedio temporal en cada posicion angular.
+        Se calcula como Cp = p_mean / (0.5 * rho * U_inf^2).
+        No se sustrae la presion de referencia (p_inf).
+    p_pa : numpy.ndarray, forma (n_tiempos, n_angulos)
+        Matriz de presion estatica en Pascales (Pa) para cada instante de
+        tiempo y cada posicion angular.
+
+    Notas
+    -----
+    - El coeficiente Cp aqui calculado no sustrae la presion del flujo libre
+      (p_inf), por lo que su interpretacion difiere ligeramente de la
+      definicion clasica Cp = (p - p_inf) / q.
+    """
+    series_p = []
+    for prb in probes_ordenados:
+        p_i, t_i, _ = imta.recortar_tiempo(
+            p_probes, probe=prb,
+            inicio=tiempo_p.iloc[0] if t_ini is None else t_ini
+        )
+        series_p.append(p_i.values)
+
+    p_theta = np.vstack(series_p).T  # (n_tiempos, n_angulos)
+    p_pa = rho * p_theta             # convertir a Pa (p en m^2/s^2)
+
+    # Promedio temporal por angulo
+    p_mean = np.mean(p_pa, axis=0)
+
+    # Cp = p / (0.5*rho*U_inf^2) (sin p_inf)
+    q = 0.5 * rho * U_inf**2
+    Cp = p_mean / q
+
+    return Cp, p_pa
