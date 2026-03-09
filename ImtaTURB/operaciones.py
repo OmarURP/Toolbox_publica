@@ -935,7 +935,7 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
     - fs:       Frecuencia de muestreo (Hz)
     """
 
-    # 1) Detectar automáticamente número de probes y línea donde inician los datos
+    # Detectar automáticamente número de probes y línea donde inician los datos
     total_probes = 0
     data_start = None
     with open(ruta_archivo, "r") as f:
@@ -949,7 +949,7 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
     if data_start is None:
         raise ValueError("No se encontró la línea '# Time' en el archivo.")
 
-    # 2) Extraer coordenadas de los probes
+    # Extraer coordenadas de los probes
     coords = {}  # {índice_probe: (x, y, z)}
     with open(ruta_archivo, "r") as f:
         for line in f:
@@ -960,7 +960,7 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
                 idx = int(m.group(1))
                 coords[idx] = tuple(map(float, m.group(2).split()))
 
-    # 3) Leer datos numéricos (tiempo y U)
+    # Leer datos numéricos (tiempo y U)
     df = pd.read_csv(
         ruta_archivo,
         skiprows=data_start,
@@ -973,14 +973,14 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
     # La primera columna es tiempo [s] - convertir directamente
     tiempo = pd.to_numeric(df[0], errors='coerce') # Coerce convierte errores en NaN
 
-    # 4) Limpiar paréntesis y convertir a float todas las demás columnas
+    # Limpiar paréntesis y convertir a float todas las demás columnas
     for col in range(1, df.shape[1]):
         # Remover paréntesis usando str.replace
         col_clean = df[col].str.replace('(', '', regex=False).str.replace(')', '', regex=False)
         # Convertir a float
         df[col] = pd.to_numeric(col_clean, errors='coerce').astype('float32') # Omar del futuro (float32-7dígitos) (float64-15dígitos)
                                                                               # Pero float64 incrementa x 40 veces de tiempo, en frecuencias y visual sin diferencias 20/11/25
-    # 5) Organizar velocidades por probe (tiempo como índice)
+    # Organizar velocidades por probe (tiempo como índice)
     U_probes = {}
     tiempo_values = tiempo.values  # Convertir una sola vez
     
@@ -995,7 +995,7 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
             index=tiempo_values,   # tiempo en el índice
         )
 
-    # 6) Cálculos de duración y frecuencia de muestreo
+    # Cálculos de duración y frecuencia de muestreo
     t_ini = float(tiempo.iloc[0])
     t_fin = float(tiempo.iloc[-1])
     duracion = t_fin - t_ini           # segundos
@@ -1007,7 +1007,7 @@ def cargar_U_OpenFOAM(ruta_archivo: str):
         dt = float("nan")
         fs = float("nan")
 
-    # 7) Reporte
+    # Reporte
     print(f"Se extrajeron {total_probes} probes.")
     print(f"Tiempo inicial: {t_ini:.2f} s, tiempo final: {t_fin:.2f} s")
     print(f"Duración de la muestra: {duracion:.2f} s")
@@ -1108,7 +1108,7 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
     - fs:       Frecuencia de muestreo (Hz)
     """
 
-    # 1) Detectar número de probes y línea donde inician los datos
+    # Detectar número de probes y línea donde inician los datos
     total_probes = 0
     data_start = None
     with open(ruta_archivo, "r") as f:
@@ -1122,7 +1122,7 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
     if data_start is None:
         raise ValueError("No se encontró la línea '# Time' en el archivo.")
 
-    # 2) Extraer coordenadas de los probes
+    # Extraer coordenadas de los probes
     coords = {}  # {índice_probe: (x, y, z)}
     with open(ruta_archivo, "r") as f:
         for line in f:
@@ -1133,7 +1133,7 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
                 idx = int(m.group(1))
                 coords[idx] = tuple(map(float, m.group(2).split()))
 
-    # 3) Leer datos numéricos (tiempo y p)
+    # Leer datos numéricos (tiempo y p)
     df = pd.read_csv(
         ruta_archivo,
         skiprows=data_start,
@@ -1146,18 +1146,18 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
     # Columna 0 es tiempo
     tiempo = pd.to_numeric(df[0], errors="coerce")
 
-    # 4) Convertir columnas de presión a float
+    # Convertir columnas de presión a float
     for col in range(1, df.shape[1]):
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float32")
 
-    # 5) Organizar presión por probe (tiempo como índice)
+    # Organizar presión por probe (tiempo como índice)
     p_probes = {}
     tiempo_values = tiempo.values
     for p in range(total_probes):
         col = 1 + p
         p_probes[p] = pd.Series(df[col].values, index=tiempo_values, name="p")
 
-    # 6) Cálculos de duración y frecuencia de muestreo
+    # Cálculos de duración y frecuencia de muestreo
     t_ini = float(tiempo.iloc[0])
     t_fin = float(tiempo.iloc[-1])
     duracion = t_fin - t_ini
@@ -1169,7 +1169,7 @@ def cargar_p_OpenFOAM(ruta_archivo: str):
         dt = float("nan")
         fs = float("nan")
 
-    # 7) Reporte
+    # Reporte
     print(f"Se extrajeron {total_probes} probes.")
     print(f"Tiempo inicial: {t_ini:.2f} s, tiempo final: {t_fin:.2f} s")
     print(f"Duración de la muestra: {duracion:.2f} s")
@@ -1212,7 +1212,7 @@ def plot_p(tiempo, p_fluc,
     ax1, ax2 = axs
     fig.suptitle(titulo, fontweight='bold')
 
-    # ===== Panel superior: presión instantánea =====
+    # Panel superior: presión instantánea
     serie = p_fluc['serie']
     inst_med = p_fluc['inst_med']
 
@@ -1228,7 +1228,7 @@ def plot_p(tiempo, p_fluc,
     ax1.legend(loc='upper right')
     ax1.grid(True, alpha=0.3, linestyle=':')
 
-    # ===== Panel inferior: presión fluctuante =====
+    # Panel inferior: presión fluctuante 
     fluc = p_fluc['fluc']
     fluc_med = p_fluc['fluc_med']
 
@@ -1237,7 +1237,7 @@ def plot_p(tiempo, p_fluc,
         fluc_med,
         color='k',
         linestyle=':',
-        label=rf'$\overline{{{etiqueta}^\prime}}={fluc_med:.3e}$'
+        label=rf'$\overline{{{etiqueta}^\prime}}={fluc_med:.3f}$'
     )
     ax2.set_xlabel('Tiempo (s)')
     ax2.set_ylabel(r"$p'$")
@@ -1258,7 +1258,7 @@ def cargar_nut_OpenFOAM(ruta_archivo: str):
     - fs:         Frecuencia de muestreo (Hz)
     """
 
-    # 1) Detectar número de probes y línea donde inician los datos
+    # Detectar número de probes y línea donde inician los datos
     total_probes = 0
     data_start = None
     with open(ruta_archivo, "r") as f:
@@ -1272,7 +1272,7 @@ def cargar_nut_OpenFOAM(ruta_archivo: str):
     if data_start is None:
         raise ValueError("No se encontró la línea '# Time' en el archivo.")
 
-    # 2) Extraer coordenadas de los probes
+    # Extraer coordenadas de los probes
     coords = {}  # {índice_probe: (x, y, z)}
     with open(ruta_archivo, "r") as f:
         for line in f:
@@ -1283,7 +1283,7 @@ def cargar_nut_OpenFOAM(ruta_archivo: str):
                 idx = int(m.group(1))
                 coords[idx] = tuple(map(float, m.group(2).split()))
 
-    # 3) Leer datos numéricos (tiempo y nut)
+    # Leer datos numéricos (tiempo y nut)
     df = pd.read_csv(
         ruta_archivo,
         skiprows=data_start,
@@ -1296,18 +1296,18 @@ def cargar_nut_OpenFOAM(ruta_archivo: str):
     # Columna 0 es tiempo
     tiempo = pd.to_numeric(df[0], errors="coerce")
 
-    # 4) Convertir columnas de nut a float64
+    # Convertir columnas de nut a float64
     for col in range(1, df.shape[1]):
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("float64")
 
-    # 5) Organizar nut por probe (tiempo como índice)
+    # Organizar nut por probe (tiempo como índice)
     nut_probes = {}
     tiempo_values = tiempo.values
     for p in range(total_probes):
         col = 1 + p
         nut_probes[p] = pd.Series(df[col].values, index=tiempo_values, name="nut")
 
-    # 6) Cálculos de duración y frecuencia de muestreo
+    # Cálculos de duración y frecuencia de muestreo
     t_ini = float(tiempo.iloc[0])
     t_fin = float(tiempo.iloc[-1])
     duracion = t_fin - t_ini
@@ -1319,7 +1319,7 @@ def cargar_nut_OpenFOAM(ruta_archivo: str):
         dt = float("nan")
         fs = float("nan")
 
-    # 7) Reporte
+    # Reporte
     print(f"Se extrajeron {total_probes} probes.")
     print(f"Tiempo inicial: {t_ini:.2f} s, tiempo final: {t_fin:.2f} s")
     print(f"Duración de la muestra: {duracion:.2f} s")
@@ -1363,7 +1363,7 @@ def plot_nut(tiempo, nut_fluc,
     ax1, ax2 = axs
     fig.suptitle(titulo, fontweight='bold')
 
-    # ===== Panel superior: nut instantáneo =====
+    # Panel superior: nut instantáneo
     serie = nut_fluc['serie']
     inst_med = nut_fluc['inst_med']
 
@@ -1379,7 +1379,7 @@ def plot_nut(tiempo, nut_fluc,
     ax1.legend(loc='upper right')
     ax1.grid(True, alpha=0.3, linestyle=':')
 
-    # ===== Panel inferior: nut fluctuante =====
+    # Panel inferior: nut fluctuante 
     fluc = nut_fluc['fluc']
     fluc_med = nut_fluc['fluc_med']
 
@@ -1399,8 +1399,8 @@ def plot_nut(tiempo, nut_fluc,
 
     return fig, axs
 
-# === Funcion auxiliar: Cp promedio vs theta ===
-def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
+# Cp (Coeficiente de presión) vs theta
+def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, p_inf, t_ini=None):
     """
     Calcula el coeficiente de presion promedio (Cp) en funcion de la posicion
     angular (theta) sobre la superficie de un cilindro, a partir de las series
@@ -1413,7 +1413,8 @@ def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
     2. Se convierte la presion cinematica a presion estatica (Pa) multiplicando
        por la densidad del fluido (rho).
     3. Se obtiene el promedio temporal de la presion en cada posicion angular.
-    4. Se normaliza con la presion dinamica q = 0.5 * rho * U_inf^2 para
+    4. Se sustrae la presion de referencia del flujo libre (p_inf) y se
+       normaliza con la presion dinamica q = 0.5 * rho * U_inf^2 para
        obtener el coeficiente de presion Cp.
 
     Parametros
@@ -1429,6 +1430,10 @@ def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
         Densidad del fluido (kg/m^3).
     U_inf : float
         Velocidad de corriente libre (m/s).
+    p_inf : float
+        Presion estatica de referencia del flujo libre (Pa). Se utiliza
+        para calcular Cp segun la definicion clasica:
+        Cp = (p - p_inf) / (0.5 * rho * U_inf^2).
     t_ini : float, opcional
         Instante de tiempo inicial para el recorte de las series. Si es
         ``None``, se utiliza el primer valor del vector de tiempo disponible
@@ -1438,17 +1443,10 @@ def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
     -------
     Cp : numpy.ndarray, forma (n_angulos,)
         Coeficiente de presion promedio temporal en cada posicion angular.
-        Se calcula como Cp = p_mean / (0.5 * rho * U_inf^2).
-        No se sustrae la presion de referencia (p_inf).
+        Se calcula como Cp = (p_mean - p_inf) / (0.5 * rho * U_inf^2).
     p_pa : numpy.ndarray, forma (n_tiempos, n_angulos)
         Matriz de presion estatica en Pascales (Pa) para cada instante de
         tiempo y cada posicion angular.
-
-    Notas
-    -----
-    - El coeficiente Cp aqui calculado no sustrae la presion del flujo libre
-      (p_inf), por lo que su interpretacion difiere ligeramente de la
-      definicion clasica Cp = (p - p_inf) / q.
     """
     series_p = []
     for prb in probes_ordenados:
@@ -1464,8 +1462,8 @@ def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, t_ini=None):
     # Promedio temporal por angulo
     p_mean = np.mean(p_pa, axis=0)
 
-    # Cp = p / (0.5*rho*U_inf^2) (sin p_inf)
+    # Cp = (p - p_inf) / (0.5*rho*U_inf^2)
     q = 0.5 * rho * U_inf**2
-    Cp = p_mean / q
+    Cp = (p_mean - p_inf) / q
 
     return Cp, p_pa
