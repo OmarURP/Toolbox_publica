@@ -1467,3 +1467,88 @@ def cp_promedio_por_theta(p_probes, probes_ordenados, rho, U_inf, p_inf, t_ini=N
     Cp = (p_mean - p_inf) / q
 
     return Cp, p_pa
+# Función para extraer presión por cilindro
+def extraer_p_theta(p_probes, probes_ordenados, t_inicio=0.0):
+    """
+    Extrae y apila las series temporales de presion cinematica (m^2/s^2)
+    de un conjunto de probes ordenadas angularmente.
+
+    Parametros
+    ----------
+    p_probes : dict
+        Diccionario de Series de presion por probe (formato de cargar_p_OpenFOAM).
+    probes_ordenados : list of int
+        Indices de sondas en orden angular creciente.
+    t_inicio : float, opcional
+        Instante inicial para el recorte temporal (s). Por defecto 50.0.
+
+    Retorna
+    -------
+    p_theta : numpy.ndarray, forma (n_tiempos, n_angulos)
+        Matriz de presion cinematica (m^2/s^2).
+    tiempo : numpy.ndarray
+        Vector de tiempo recortado (s).
+    """
+    series_p = []
+    for prb in probes_ordenados:
+        p_i, t_i, _ = imta.recortar_tiempo(
+            p_probes, probe=prb,
+            inicio=t_inicio
+        )
+        series_p.append(p_i.values)
+
+    p_theta = np.vstack(series_p).T  # (n_tiempos, n_angulos)
+    return p_theta, t_i.values
+
+
+# Función para CD y CL a partir de presión cinematica
+def cd_cl_integrando_p(p_theta, theta, rho, U_inf, R, D, span):
+    """
+    Calcula las series temporales de los coeficientes de arrastre (CD)
+    y sustentacion (CL) por integracion de presion sobre la superficie
+    de un cilindro.
+
+    Parametros
+    ----------
+    p_theta : numpy.ndarray, forma (n_tiempos, n_angulos)
+        Presion cinematica (m^2/s^2) en cada instante y posicion angular.
+    theta : numpy.ndarray
+        Vector de angulos en radianes.
+    rho : float
+        Densidad del fluido (kg/m^3).
+    U_inf : float
+        Velocidad de corriente libre (m/s).
+    R : float
+        Radio del cilindro (m).
+    D : float
+        Diametro del cilindro (m).
+    span : float
+        Altura (envergadura) del cilindro (m).
+
+    Retorna
+    -------
+    CD : numpy.ndarray
+        Serie temporal del coeficiente de arrastre.
+    CL : numpy.ndarray
+        Serie temporal del coeficiente de sustentacion.
+    """
+    dtheta = theta[1] - theta[0]
+    p_pa = rho * p_theta
+    nx = np.cos(theta)
+    nz = np.sin(theta)
+
+    # Fuerzas por unidad de longitud (N/m)
+    Fx = -np.sum(p_pa * nx, axis=1) * R * dtheta
+    Fz = -np.sum(p_pa * nz, axis=1) * R * dtheta
+
+    # Fuerza total 3D
+    Fx_total = Fx * span
+    Fz_total = Fz * span
+
+    # Coeficientes
+    A = D * span
+    q = 0.5 * rho * U_inf**2
+    CD = Fx_total / (q * A)
+    CL = Fz_total / (q * A)
+
+    return CD, CL, Fx_total, Fz_total
