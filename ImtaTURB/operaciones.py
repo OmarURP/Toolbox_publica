@@ -251,43 +251,122 @@ def cargar_vectrino(file):
     
     return U, tiempo, parametros
 
-# Función para calcular el tensor de autocorrelación normalizado
-def autocorrelacion_norm(autoc_ux, autoc_uy, autoc_uz, frecuencia,
-                         plot=True, titulo=r'Tensor de Autocorrelación ($R_{ij}$)', max_lag_seg=None):
+# Funcion para calcular el tensor de autocorrelacion normalizado
+def autocorrelacion_norm(autoc_ux, autoc_uy=None, autoc_uz=None, frecuencia=None,
+                         plot=True, titulo=None, max_lag_seg=None,
+                         etiqueta='p'):
     """
-    Calcula el tensor de autocorrelación normalizado R_ij(τ) para tres componentes
-    de velocidad (u_x, u_y, u_z) y devuelve el vector de lags en segundos.
+    Calcula la autocorrelacion normalizada R(tau).
 
-    Definición:
-      R_ij(τ) = < u_i(t) * u_j(t + τ) >
-    Cálculo en modo 'full' (lags desde -(N-1) hasta +(N-1)).
+    Funciona para dos casos:
+      - Campo vectorial (3 componentes): se pasan autoc_ux, autoc_uy, autoc_uz.
+        Calcula el tensor R_ij(tau) (3x3) y grafica la parte triangular superior.
+      - Campo escalar (1 serie): se pasa unicamente autoc_ux; autoc_uy y autoc_uz
+        se dejan en None. Calcula R(tau) = <s'(t)*s'(t+tau)> / <s'^2> y grafica
+        una sola curva.
 
-    Normalización:
+    Definicion (vectorial):
+      R_ij(tau) = < u_i(t) * u_j(t + tau) >
+    Definicion (escalar):
+      R(tau)    = < s'(t) * s'(t + tau) > / < s'(t)^2 >
+
+    Calculo en modo 'full' (lags desde -(N-1) hasta +(N-1)).
+
+    Normalizacion (vectorial):
       - Diagonales: se normalizan por R_ii(0).
       - Cruzadas: se normalizan por sqrt(R_ii(0) * R_jj(0)).
 
-    Parámetros
+    Parametros
     ----------
-    autoc_ux, autoc_uy, autoc_uz : array_like, 1D
-        Series de fluctuaciones (u' para cada componente). Deben tener la misma longitud.
+    autoc_ux : array_like, 1D
+        Serie de fluctuaciones de la primera componente (u'_x) o del campo
+        escalar (p', nut', etc.).
+    autoc_uy : array_like, 1D or None, optional
+        Serie de fluctuaciones de la segunda componente (u'_y).
+        Si es None junto con autoc_uz, se activa el modo escalar.
+    autoc_uz : array_like, 1D or None, optional
+        Serie de fluctuaciones de la tercera componente (u'_z).
+        Si es None junto con autoc_uy, se activa el modo escalar.
     frecuencia : float
         Frecuencia de muestreo en Hz (se usa para convertir lags a segundos).
     plot : bool, optional
-        Si True, genera la figura 3x3 con las subplots del tensor.
+        Si True, genera la figura correspondiente.
+    titulo : str or None, optional
+        Titulo de la figura. Si es None se asigna automaticamente segun el modo.
     max_lag_seg : float or None, optional
-        Si se proporciona, recorta las curvas a ±max_lag_seg para la gráfica.
+        Si se proporciona, recorta las curvas a +/-max_lag_seg para la grafica.
+    etiqueta : str, optional
+        Etiqueta LaTeX (sin $) para la variable escalar. Solo se usa en modo
+        escalar. Por defecto 'p'.
 
     Retorna
     -------
     tensor_r : dict
-        Diccionario con las 9 componentes normalizadas:
-        'r11','r12','r13','r21','r22','r23','r31','r32','r33'
-        Cada entrada es un array de longitud 2*N-1 (modo 'full').
+        - Modo vectorial: diccionario con las componentes normalizadas
+          'r11','r12','r13','r22','r23','r33'.
+        - Modo escalar: diccionario con una sola clave 'r11'.
+        Cada entrada es un array de longitud 2*N-1.
     lags_s : numpy.ndarray
-        Vector de lags en segundos (longitud 2*N-1) correspondiente a las entradas.
+        Vector de lags en segundos (longitud 2*N-1).
     fig : matplotlib.figure.Figure or None
         Si plot=True, devuelve la figura; en caso contrario None.
     """
+    # Determinar modo: escalar vs vectorial
+    escalar = (autoc_uy is None) and (autoc_uz is None)
+
+    if escalar:
+        # MODO ESCALAR
+        if titulo is None:
+            titulo = rf'Autocorrelacion Normalizada ($R_{{{etiqueta}{etiqueta}}}$)'
+
+        s = np.asarray(autoc_ux).ravel()
+        N = s.size
+        fs = float(frecuencia)
+
+        # Autocorrelacion en modo 'full'
+        rpp = np.correlate(s, s, mode='full')
+        mid = rpp.size // 2
+        rpp_0 = rpp[mid]
+
+        # Normalizacion
+        r_norm = rpp / rpp_0
+
+        tensor_r = {'r11': r_norm}
+
+        # Lags en segundos
+        lags = np.arange(-N + 1, N)
+        lags_s = lags / fs
+
+        fig = None
+        if plot:
+            if max_lag_seg is not None:
+                mask = np.abs(lags_s) <= float(max_lag_seg)
+                lags_plot = lags_s[mask]
+                def _pick(a): return a[mask]
+            else:
+                lags_plot = lags_s
+                def _pick(a): return a
+
+            fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+            fig.suptitle(titulo, fontweight='bold')
+
+            ax.plot(lags_plot, _pick(r_norm), color='b', linewidth=0.5)
+            ax.set_ylabel(rf'$R_{{{etiqueta}{etiqueta}}}$')
+            ax.set_xlabel(r'Desfase $\tau$ (s)')
+            ax.grid(True)
+            ax.tick_params(axis='x', labelbottom=True)
+            ax.tick_params(axis='y', labelleft=True)
+
+            plt.tight_layout()
+            fig.patch.set_facecolor('none')
+            ax.set_facecolor('white')
+
+        return tensor_r, lags_s, fig
+
+    #  MODO VECTORIAL 
+    if titulo is None:
+        titulo = r'Tensor de Autocorrelacion ($R_{ij}$)'
+
     # Convertir a arrays 1D y validar longitudes
     ux = np.asarray(autoc_ux)
     uy = np.asarray(autoc_uy)
@@ -303,38 +382,29 @@ def autocorrelacion_norm(autoc_ux, autoc_uy, autoc_uz, frecuencia,
     # Cruzadas
     r12 = np.correlate(ux, uy, mode='full')
     r13 = np.correlate(ux, uz, mode='full')
-    #r21 = np.correlate(uy, ux, mode='full')
     r23 = np.correlate(uy, uz, mode='full')
-    #r31 = np.correlate(uz, ux, mode='full')
-    #r32 = np.correlate(uz, uy, mode='full')
 
-    # índice central (tau = 0)
+    # indice central (tau = 0)
     mid = r11.size // 2
 
-    # valores escalares en tau=0 (pueden ser cero)
+    # valores escalares en tau=0
     r11_norm = r11[mid]
     r22_norm = r22[mid]
     r33_norm = r33[mid]
 
-    # Denominadores para las cruzadas (sin protección)
+    # Denominadores para las cruzadas
     denom_12 = np.sqrt(r11_norm * r22_norm)
     denom_13 = np.sqrt(r11_norm * r33_norm)
     denom_23 = np.sqrt(r22_norm * r33_norm)
 
     tensor_r = {}
-    # DIVISIONES DIRECTAS (sin comprobaciones)
     tensor_r['r11'] = r11 / r11_norm
     tensor_r['r22'] = r22 / r22_norm
     tensor_r['r33'] = r33 / r33_norm
 
     tensor_r['r12'] = r12 / denom_12
-    #tensor_r['r21'] = r21 / denom_12
-
     tensor_r['r13'] = r13 / denom_13
-    #tensor_r['r31'] = r31 / denom_13
-
     tensor_r['r23'] = r23 / denom_23
-    #tensor_r['r32'] = r32 / denom_23
 
     # lags (en muestras) y convertir a segundos
     lags = np.arange(-N + 1, N)
@@ -342,7 +412,6 @@ def autocorrelacion_norm(autoc_ux, autoc_uy, autoc_uz, frecuencia,
 
     fig = None
     if plot:
-        # Preparar recorte para la gráfica si se pide max_lag_seg
         if max_lag_seg is not None:
             mask = np.abs(lags_s) <= float(max_lag_seg)
             lags_plot = lags_s[mask]
@@ -396,7 +465,6 @@ def autocorrelacion_norm(autoc_ux, autoc_uy, autoc_uz, frecuencia,
 
         plt.tight_layout()
 
-        # Fondo transparente de la figura y ejes con fondo blanco
         fig.patch.set_facecolor('none')
         for ax in axs.flat:
             ax.set_facecolor('white')
@@ -760,49 +828,139 @@ def espectros_tensor(tensor_r, frecuencia,
 
     return frecs_pos_dict, espectro_dict, fig
 
-# Función para calcular el tensor de correlación cruzada normalizado
+# Funcion para calcular el tensor de correlacion cruzada normalizado
 def correlacion_cruzada_norm(ux_senal1, ux_senal2,
-                             uy_senal1, uy_senal2,
-                             uz_senal1, uz_senal2,
-                             frecuencia,
+                             uy_senal1=None, uy_senal2=None,
+                             uz_senal1=None, uz_senal2=None,
+                             frecuencia=None,
                              plot=True,
-                             titulo=r'Tensor de Correlación Cruzada ($R_{ij}$)',
-                             max_lag_seg=None):
+                             titulo=None,
+                             max_lag_seg=None,
+                             etiqueta1='p_1',
+                             etiqueta2='p_2'):
     """
-    Calcula el tensor de correlación cruzada normalizado R_ij(τ) entre dos
-    conjuntos de series (senal1, senal2) con las tres componentes u_x, u_y, u_z.
+    Calcula la correlacion cruzada normalizada R(tau).
 
-    Definición:
-      R_ij(τ) = < u_i^(senal1)(t) * u_j^(senal2)(t + τ) >
+    Funciona para dos casos:
+      - Campo vectorial (3 componentes por senal): se pasan las 6 series
+        ux_senal1, ux_senal2, uy_senal1, uy_senal2, uz_senal1, uz_senal2.
+        Calcula el tensor completo R_ij(tau) (9 componentes) y grafica 3x3.
+      - Campo escalar (1 serie por senal): se pasan unicamente ux_senal1 y
+        ux_senal2; los demas se dejan en None. Calcula
+        R_{s1,s2}(tau) = <s1'(t)*s2'(t+tau)> / sqrt(<s1'^2>*<s2'^2>)
+        y grafica una sola curva.
 
-    Cálculo en modo 'full' (lags desde -(N-1) hasta +(N-1)) y normalización:
-      - Se normaliza cada componente por sqrt( autocorr_i_s1(0) * autocorr_j_s2(0) ).
+    Definicion (vectorial):
+      R_ij(tau) = < u_i^(senal1)(t) * u_j^(senal2)(t + tau) >
+    Definicion (escalar):
+      R(tau)    = < s1'(t) * s2'(t+tau) > / sqrt( <s1'^2> * <s2'^2> )
 
-    Parámetros
+    Calculo en modo 'full' (lags desde -(N-1) hasta +(N-1)).
+
+    Parametros
     ----------
-    ux_senal1, ux_senal2, uy_senal1, uy_senal2, uz_senal1, uz_senal2 : array_like, 1D
-        Series de fluctuaciones (u' para cada componente) para la señal 1 y señal 2.
-        Todas las series deben tener la misma longitud N.
+    ux_senal1, ux_senal2 : array_like, 1D
+        Series de fluctuaciones de la primera componente (u'_x) o del campo
+        escalar para la senal 1 y senal 2, respectivamente.
+    uy_senal1, uy_senal2 : array_like, 1D or None, optional
+        Series de fluctuaciones de la segunda componente (u'_y).
+        Si son None junto con uz_*, se activa el modo escalar.
+    uz_senal1, uz_senal2 : array_like, 1D or None, optional
+        Series de fluctuaciones de la tercera componente (u'_z).
+        Si son None junto con uy_*, se activa el modo escalar.
     frecuencia : float
-        Frecuencia de muestreo en Hz (se usa para convertir lags a segundos).
+        Frecuencia de muestreo en Hz.
     plot : bool, optional
-        Si True, genera la figura 3x3 con las 9 subplots (todas activas).
-    titulo : str, optional
-        Título de la figura.
+        Si True, genera la figura correspondiente.
+    titulo : str or None, optional
+        Titulo de la figura. Si es None se asigna automaticamente segun el modo.
     max_lag_seg : float or None, optional
-        Si se proporciona, recorta las curvas a ±max_lag_seg para la gráfica.
+        Si se proporciona, recorta las curvas a +/-max_lag_seg para la grafica.
+    etiqueta1 : str, optional
+        Etiqueta LaTeX (sin $) para la senal 1 en modo escalar. Por defecto 'p_1'.
+    etiqueta2 : str, optional
+        Etiqueta LaTeX (sin $) para la senal 2 en modo escalar. Por defecto 'p_2'.
 
     Retorna
     -------
     tensor_r : dict
-        Diccionario con las 9 componentes normalizadas:
-        'r11','r12','r13','r21','r22','r23','r31','r32','r33'
-        Cada entrada es un array de longitud 2*N-1 (modo 'full').
+        - Modo vectorial: diccionario con las 9 componentes normalizadas
+          'r11','r12','r13','r21','r22','r23','r31','r32','r33'.
+        - Modo escalar: diccionario con una sola clave 'r11'.
+        Cada entrada es un array de longitud 2*N-1.
     lags_s : numpy.ndarray
-        Vector de lags en segundos (longitud 2*N-1) correspondiente a las entradas.
+        Vector de lags en segundos (longitud 2*N-1).
     fig : matplotlib.figure.Figure or None
         Si plot=True, devuelve la figura; en caso contrario None.
     """
+    # ---- Determinar modo: escalar vs vectorial ----
+    escalar = (uy_senal1 is None) and (uy_senal2 is None) \
+              and (uz_senal1 is None) and (uz_senal2 is None)
+
+    if escalar:
+        # MODO ESCALAR
+        if titulo is None:
+            titulo = rf'Correlacion Cruzada Normalizada ($R_{{{etiqueta1},{etiqueta2}}}$)'
+
+        s1 = np.asarray(ux_senal1).ravel()
+        s2 = np.asarray(ux_senal2).ravel()
+
+        N = s1.size
+        if s2.size != N:
+            raise ValueError("Ambas series deben tener la misma longitud")
+
+        fs = float(frecuencia)
+
+        # Autocorrelaciones en tau=0 para la normalizacion
+        a_s1 = np.correlate(s1, s1, mode='full')
+        a_s2 = np.correlate(s2, s2, mode='full')
+        mid = a_s1.size // 2
+        a_s1_0 = a_s1[mid]
+        a_s2_0 = a_s2[mid]
+
+        # Correlacion cruzada en modo 'full'
+        r12 = np.correlate(s1, s2, mode='full')
+
+        # Denominador y normalizacion
+        denom = np.sqrt(a_s1_0 * a_s2_0)
+        r_norm = r12 / denom
+
+        tensor_r = {'r11': r_norm}
+
+        # Lags en segundos
+        lags = np.arange(-N + 1, N)
+        lags_s = lags / fs
+
+        fig = None
+        if plot:
+            if max_lag_seg is not None:
+                mask = np.abs(lags_s) <= float(max_lag_seg)
+                lags_plot = lags_s[mask]
+                def _pick(a): return a[mask]
+            else:
+                lags_plot = lags_s
+                def _pick(a): return a
+
+            fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+            fig.suptitle(titulo, fontweight='bold')
+
+            ax.plot(lags_plot, _pick(r_norm), color='b', linewidth=0.5)
+            ax.set_ylabel(rf'$R_{{{etiqueta1},{etiqueta2}}}$')
+            ax.set_xlabel(r'Desfase $\tau$ (s)')
+            ax.grid(True)
+            ax.tick_params(axis='x', labelbottom=True)
+            ax.tick_params(axis='y', labelleft=True)
+
+            plt.tight_layout()
+            fig.patch.set_facecolor('none')
+            ax.set_facecolor('white')
+
+        return tensor_r, lags_s, fig
+
+    #  MODO VECTORIAL (original) 
+    if titulo is None:
+        titulo = r'Tensor de Correlacion Cruzada ($R_{ij}$)'
+
     # Convertir a arrays 1D y validar longitudes
     ux1 = np.asarray(ux_senal1)
     ux2 = np.asarray(ux_senal2)
@@ -810,14 +968,14 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
     uy2 = np.asarray(uy_senal2)
     uz1 = np.asarray(uz_senal1)
     uz2 = np.asarray(uz_senal2)
-    # Validar tamaños
+    # Validar tamanos
     N = ux1.size
     if not (ux2.size == uy1.size == uy2.size == uz1.size == uz2.size == N):
         raise ValueError("Todas las series deben tener la misma longitud")
 
     fs = float(frecuencia)
 
-    # Autocorrelaciones (modo 'full') para obtener normas en tau=0 de cada componente
+    # Autocorrelaciones (modo 'full') para obtener normas en tau=0
     a11 = np.correlate(ux1, ux1, mode='full')
     a22 = np.correlate(uy1, uy1, mode='full')
     a33 = np.correlate(uz1, uz1, mode='full')
@@ -826,7 +984,6 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
     b22 = np.correlate(uy2, uy2, mode='full')
     b33 = np.correlate(uz2, uz2, mode='full')
     mid = a11.size // 2
-    # valores escalares en tau=0 para cada autocorrelación
     a11_0 = a11[mid]
     a22_0 = a22[mid]
     a33_0 = a33[mid]
@@ -847,7 +1004,7 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
     r32 = np.correlate(uz1, uy2, mode='full')
     r33 = np.correlate(uz1, uz2, mode='full')
 
-    # Denominadores usando productos sqrt( autocorr_s1(0) * autocorr_s2(0) )
+    # Denominadores
     denom_11 = np.sqrt(a11_0 * b11_0)
     denom_12 = np.sqrt(a11_0 * b22_0)
     denom_13 = np.sqrt(a11_0 * b33_0)
@@ -860,7 +1017,7 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
     denom_32 = np.sqrt(a33_0 * b22_0)
     denom_33 = np.sqrt(a33_0 * b33_0)
 
-    # Construir diccionario del tensor (normalizaciones directas)
+    # Construir diccionario del tensor
     tensor_r = {}
     tensor_r['r11'] = r11 / denom_11
     tensor_r['r12'] = r12 / denom_12
@@ -880,7 +1037,6 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
 
     fig = None
     if plot:
-        # Preparar recorte para la gráfica si se pide max_lag_seg
         if max_lag_seg is not None:
             mask = np.abs(lags_s) <= float(max_lag_seg)
             lags_plot = lags_s[mask]
@@ -892,9 +1048,8 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
         fig, axs = plt.subplots(3, 3, figsize=(12, 8), sharex=True, sharey=True)
         fig.suptitle(titulo, fontweight='bold')
 
-        colores = ['b', 'b', 'b'] 
+        colores = ['b', 'b', 'b']
 
-        # Recorremos las 9 posiciones (todas activas)
         keys = [['r11', 'r12', 'r13'],
                 ['r21', 'r22', 'r23'],
                 ['r31', 'r32', 'r33']]
@@ -908,16 +1063,13 @@ def correlacion_cruzada_norm(ux_senal1, ux_senal2,
                 ax.set_ylabel(f'$R_{{{ind[1:]}}}$')
                 ax.grid(True)
 
-                # Mostrar números en ambos ejes para TODOS los 9 subplots
                 ax.tick_params(axis='x', labelbottom=True)
                 ax.tick_params(axis='y', labelleft=True)
 
-                # Mostrar etiqueta del eje x en todas las subplots (solicitado)
                 ax.set_xlabel('Desfase $\\tau$ (s)')
 
         plt.tight_layout()
 
-        # Fondo transparente de la figura y ejes con fondo blanco
         fig.patch.set_facecolor('none')
         for ax in axs.flat:
             ax.set_facecolor('white')
