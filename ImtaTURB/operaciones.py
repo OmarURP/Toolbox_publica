@@ -347,10 +347,10 @@ def autocorrelacion_norm(autoc_ux, autoc_uy=None, autoc_uz=None, frecuencia=None
                 lags_plot = lags_s
                 def _pick(a): return a
 
-            fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+            fig, ax = plt.subplots(1, 1, figsize=(10, 3))
             fig.suptitle(titulo, fontweight='bold')
 
-            ax.plot(lags_plot, _pick(r_norm), color='b', linewidth=0.5)
+            ax.plot(lags_plot, _pick(r_norm), color='b')
             ax.set_ylabel(rf'$R_{{{etiqueta}{etiqueta}}}$')
             ax.set_xlabel(r'Desfase $\tau$ (s)')
             ax.grid(True)
